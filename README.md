@@ -33,3 +33,25 @@ When you're done working, deactivate the virtual environment:
 ```bash
 deactivate
 ```
+
+## Commands for LM Studio server
+
+### Get the model
+
+```bash
+curl -X GET http://192.168.0.204:1234/v1/models
+```
+
+### For direct text completion (non-chat format), use:
+
+```bash
+curl http://localhost:1234/api/v0/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "google/gemma-3-1b-it-qat",
+    "prompt": "The capital of Canada is",
+    "temperature": 0.7,
+    "max_tokens": 50,
+    "stream": false
+  }'
+```
