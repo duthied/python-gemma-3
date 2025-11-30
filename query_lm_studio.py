@@ -36,10 +36,14 @@ def load_settings():
         print(f"Error: Invalid LM_STUDIO_PORT - {e}", file=sys.stderr)
         sys.exit(1)
 
+    # Load max_tokens with default fallback
+    max_tokens = int(os.getenv('LM_STUDIO_MAX_TOKENS', '100'))
+
     return {
         'host': required_vars['LM_STUDIO_HOST'],
         'port': port,
-        'model': required_vars['LM_STUDIO_MODEL']
+        'model': required_vars['LM_STUDIO_MODEL'],
+        'max_tokens': max_tokens
     }
 
 
@@ -54,7 +58,9 @@ def query_lm_studio(prompt, settings, temperature=0.7, max_tokens=100):
         max_tokens: Maximum tokens to generate (default: 100)
 
     Returns:
-        The completion text or None on error
+        Dictionary with 'text' and 'usage' keys, or None on error
+        - text: The completion text
+        - usage: Dictionary with prompt_tokens, completion_tokens, total_tokens
     """
     url = f"http://{settings['host']}:{settings['port']}/api/v0/completions"
 
@@ -72,9 +78,19 @@ def query_lm_studio(prompt, settings, temperature=0.7, max_tokens=100):
 
         result = response.json()
 
-        # Extract the completion text from the response
+        # Extract the completion text and usage from the response
         if 'choices' in result and len(result['choices']) > 0:
-            return result['choices'][0].get('text', '')
+            text = result['choices'][0].get('text', '')
+            usage = result.get('usage', {})
+
+            return {
+                'text': text,
+                'usage': {
+                    'prompt_tokens': usage.get('prompt_tokens', 0),
+                    'completion_tokens': usage.get('completion_tokens', 0),
+                    'total_tokens': usage.get('total_tokens', 0)
+                }
+            }
         else:
             print("Error: Unexpected response format from API", file=sys.stderr)
             return None
@@ -121,14 +137,17 @@ Examples:
     parser.add_argument(
         '--max-tokens',
         type=int,
-        default=100,
-        help='Maximum tokens to generate (default: 100)'
+        default=None,
+        help='Maximum tokens to generate (default: from .env LM_STUDIO_MAX_TOKENS or 100)'
     )
 
     args = parser.parse_args()
 
     # Load settings from .env file
     settings = load_settings()
+
+    # Use max_tokens from command line if provided, otherwise from settings
+    max_tokens = args.max_tokens if args.max_tokens is not None else settings['max_tokens']
 
     # Query LM Studio
     print(f"Querying LM Studio with model: {settings['model']}")
@@ -138,12 +157,21 @@ Examples:
         args.prompt,
         settings,
         temperature=args.temperature,
-        max_tokens=args.max_tokens
+        max_tokens=max_tokens
     )
 
     if completion is not None:
         print("Response:")
-        print(completion)
+        print(completion['text'])
+
+        # Display token usage
+        usage = completion['usage']
+        print("\n---")
+        print(f"Token Usage:")
+        print(f"  Prompt tokens: {usage['prompt_tokens']}")
+        print(f"  Completion tokens: {usage['completion_tokens']}")
+        print(f"  Total tokens: {usage['total_tokens']}")
+        print(f"  Max tokens (limit): {max_tokens}")
         sys.exit(0)
     else:
         sys.exit(1)
